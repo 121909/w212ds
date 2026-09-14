@@ -37,6 +37,18 @@ usb_attached() {
     [ "$(cat "$USB_ONLINE")" = "1" ]
 }
 
+# The separation should engage only when a real data host (PC/Windows with adb)
+# supplies the port - NOT for a plain wall/USB charger. A charger still reports
+# usb/online=1, so gate on the USB gadget config instead:
+#   "charging,adb" / "mtp,adb" / "rndis,adb" ...  -> data host present -> split
+#   "charging" / "charge_only" ...                -> charger only -> normal charge
+usb_host_attached() {
+    case "$(getprop sys.usb.state)" in
+        *,adb) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 set_setting() {
     # Persist the ZTE switch so the Settings UI reflects our state.
     # Best-effort: ignore failure (settings binary may not be ready early at boot).
@@ -62,7 +74,7 @@ split_off() {
 
 configure() {
     check_env || return 1
-    if usb_attached; then
+    if usb_host_attached; then
         split_on
     else
         split_off
@@ -90,9 +102,7 @@ case "$MODE" in
 
         while true; do
             wanted=0
-            if [ -e "$USB_ONLINE" ] && [ "$(cat "$USB_ONLINE")" = "1" ]; then
-                wanted=1
-            fi
+            usb_host_attached && wanted=1
 
             node="$(cat "$CTL" 2>/dev/null || echo -)"
             sw="$(settings get global "$SETTING_KEY" 2>/dev/null)"
