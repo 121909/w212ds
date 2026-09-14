@@ -60,16 +60,29 @@ configure() {
 
 case "$MODE" in
     service)
-        # Used from service.sh; also reacts to inotifywait on usb/online.
-        # If inotifywait is absent, fall back to one-shot configure.
-        if command -v inotifywait >/dev/null 2>&1; then
-            configure
-            while inotifywait -q -e modify "$USB_ONLINE"; do
-                configure
-            done
-        else
-            configure
-        fi
+        # Boot daemon. USB present state is not reliably available early at
+        # boot (usb/online settles late) and sysfs attributes do not emit
+        # inotify events, so poll instead of watching.
+        #
+        # Phase 1: wait for the charger policy to settle before touching the
+        # control node (up to 2 min, checking every 3s). Then apply.
+        # Phase 2: while running, re-check periodically so we also react to
+        # plug/unplug and to any charger-manager reset of the node.
+        SETTLE=120
+        INTERVAL=5
+        waited=0
+        while [ "$waited" -lt "$SETTLE" ]; do
+            [ "$(cat "$USB_ONLINE" 2>/dev/null)" = "None" ] || break
+            sleep 3
+            waited=$((waited + 3))
+        done
+        # Always apply initial state (online 1 -> split; 0/absent -> normal).
+        configure || exit 1
+        # Main loop: re-apply on every interval. Cheap write if unchanged.
+        while true; do
+            sleep "$INTERVAL"
+            configure || break
+        done
         ;;
     on)
         check_env || exit 1
