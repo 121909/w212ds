@@ -88,15 +88,19 @@ case "$MODE" in
             waited=$((waited + 3))
         done
 
-        current=""
         while true; do
             wanted=0
             if [ -e "$USB_ONLINE" ] && [ "$(cat "$USB_ONLINE")" = "1" ]; then
                 wanted=1
             fi
 
-            value="$(cat "$CTL" 2>/dev/null || echo -)"
-            if [ "$value" != "$wanted" ]; then
+            node="$(cat "$CTL" 2>/dev/null || echo -)"
+            sw="$(settings get global "$SETTING_KEY" 2>/dev/null)"
+
+            # Re-apply only when node or the UI switch disagrees with the desired
+            # state. This also repairs a stale switch (e.g. vendor reset it to 0
+            # while separation is still hardware-active).
+            if [ "$node" != "$wanted" ] || [ "$sw" != "$wanted" ]; then
                 if [ "$wanted" = "1" ]; then
                     split_on
                 else

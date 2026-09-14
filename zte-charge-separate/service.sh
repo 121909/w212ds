@@ -21,7 +21,9 @@ LOG_FILE="$LOG_DIR/zte-charge-separate.log"
     sleep 5
 
     # Run the controller in service mode (blocks, polling usb/online).
-    exec "$CONFIG_SH" service
+    # Invoke via sh: KernelSU/Magisk extract module zips without preserving
+    # Unix exec bits, so relying on +x would fail after every update.
+    exec sh "$CONFIG_SH" service
 ) >>"$LOG_FILE" 2>&1 &
 
 exit 0
