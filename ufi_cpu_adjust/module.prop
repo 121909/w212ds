@@ -1,0 +1,7 @@
+id=ufi_cpu_adjust
+name=UFI CPU调节器
+version=v2.0
+versionCode=200
+author=KANO
+description=开机应用CPU调节器配置(核心开关/调节器)。修改 /data/adb/modules/ufi_cpu_adjust/config.sh 后重启生效。
+webuiIcon=webroot/icon.svg

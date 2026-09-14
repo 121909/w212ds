@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CPU调节器</title>
+<style>
+    body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; margin: 0; padding: 16px; }
+    .card { background: #262626; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    h1 { font-size: 17px; margin: 0 0 12px; }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #333; }
+    .row:last-child { border-bottom: none; }
+    .label { font-size: 13px; color: #999; }
+    .value { font-size: 15px; font-weight: 600; }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .btns button { flex: 1 1 30%; min-width: 84px; padding: 10px; border: none; border-radius: 8px; font-size: 14px; background: #333; color: #eee; cursor: pointer; }
+    .btns button.active { background: #4caf50; color: #fff; }
+    .note { font-size: 12px; color: #888; margin-top: 12px; line-height: 1.6; }
+    .status { font-size: 12px; color: #f57c00; min-height: 14px; margin-top: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+    .switch {
+        display: flex; align-items: center; justify-content: space-between;
+        background: #1f1f1f; border-radius: 10px; padding: 10px; font-size: 13px;
+    }
+    .switch .on {
+        position: relative; width: 44px; height: 24px; flex-shrink: 0; margin-left: 8px;
+        background: #444; border: none; border-radius: 12px; cursor: pointer; transition: background .2s;
+    }
+    .switch .on::after {
+        content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+        background: #999; border-radius: 50%; transition: transform .2s, background .2s;
+    }
+    .switch .on.active { background: #4caf50; }
+    .switch .on.active::after { transform: translateX(20px); background: #fff; }
+    .group-label { font-size: 13px; color: #9c27b0; font-weight: 600; margin: 10px 0 4px; }
+</style>
+</head>
+<body>
+    <div class="card">
+        <h1>CPU 调度器</h1>
+        <div class="row"><span class="label">小核 A55 (cpu0-3)</span><span class="value" id="gov0">读取中…</span></div>
+        <div class="row"><span class="label">大核 A76 (cpu4-6)</span><span class="value" id="gov4">读取中…</span></div>
+        <div class="row"><span class="label">大核 A76 (cpu7)</span><span class="value" id="gov7">读取中…</span></div>
+        <div class="btns">
+            <button data-gov="powersave">省电</button>
+            <button data-gov="conservative">平衡</button>
+            <button data-gov="schedutil">智能</button>
+            <button data-gov="performance">性能</button>
+            <button data-gov="uscfreq">USCFreq</button>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="note">点击按钮立即切换全部核心簇调节器，并保存配置（重启后自动应用）。</div>
+    </div>
+
+    <div class="card">
+        <h1>CPU 核心开关</h1>
+        <div class="group-label">小核 A55</div>
+        <div class="grid" id="cores0"></div>
+        <div class="group-label">大核 A76</div>
+        <div class="grid" id="cores4"></div>
+        <div class="btns">
+            <button id="btn_onall">全部开启</button>
+        </div>
+        <div class="status" id="cstatus"></div>
+        <div class="note">关闭核心后其负责的负载会迁移到其余核心。可关闭任意单个核心（含 CPU0，但极端情况可能造成偶发卡顿，不建议关）。修改保存配置，重启后仍生效。</div>
+    </div>
+    <script type="module" src="index.js"></script>
+</body>
+</html>
