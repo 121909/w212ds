@@ -44,13 +44,18 @@ set_setting() {
 }
 
 split_on() {
-    echo 1 > "$CTL"
+    # Setting first: vendor.charged watches charge_separation_switch and
+    # re-applies its own policy to the node. Then we hard-write the node so
+    # separation engages even below the vendor charge threshold.
     set_setting 1
+    sleep 1
+    echo 1 > "$CTL"
     log "charge separation enabled (node=1, switch=1)"
 }
 
 split_off() {
     set_setting 0
+    sleep 1
     echo 0 > "$CTL"
     log "charge separation disabled (node=0, switch=0)"
 }
