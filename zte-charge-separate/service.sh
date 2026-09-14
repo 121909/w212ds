@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # zte-charge-separate service.sh
-# Runs at boot as the root domain. Applies charge separation whenever the
-# device is powered from a USB host (adb sessions, wired USB), and reverts to
-# normal charging when it is unplugged / switched to a wall charger.
+# Runs at boot as the root domain. Drives charge separation via the ZTE official
+# setting switch (so the built-in Settings UI stays in sync) and hard-engages
+# the sysfs node - even below the vendor charge threshold - whenever a USB host
+# is attached. Reverts to normal charging when USB is removed / state unknown.
 
 SELF="/data/adb/modules/zte-charge-separate"
 CONFIG_SH="$SELF/charger_separate.sh"
@@ -19,7 +20,7 @@ LOG_FILE="$LOG_DIR/zte-charge-separate.log"
     # Give Android a few seconds to settle before touching power nodes.
     sleep 5
 
-    # Run the controller in service mode (blocks on inotifywait).
+    # Run the controller in service mode (blocks, polling usb/online).
     exec "$CONFIG_SH" service
 ) >>"$LOG_FILE" 2>&1 &
 

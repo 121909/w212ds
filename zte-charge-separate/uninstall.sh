@@ -6,5 +6,6 @@
 CTL="/sys/devices/platform/charger-manager/zte_power_supply/zte_battery/battery_charging_enabled"
 
 [ ! -e "$CTL" ] || echo 0 > "$CTL" 2>/dev/null
+settings put global charge_separation_switch 0 2>/dev/null
 
 exit 0

@@ -3,31 +3,33 @@
 #
 # Charger-separation control for ZTE hardware (W210DS / charger-manager + zte_battery).
 #
-# Node: /sys/devices/platform/charger-manager/zte_power_supply/zte_battery/battery_charging_enabled
-#   write 1 -> disable charging (bypass / charge separation)
-#   write 0 -> resume charging
+# Dual mechanism:
+#   1) ZTE official switch (charge_separation_switch global setting) - keeps the
+#      built-in Settings UI (com.zte.powersavemode SeparationChargeSettingActivity)
+#      in sync and lets the vendor daemon drive its own policy.
+#   2) Hardware sysfs node (battery_charging_enabled) as a hard override - engages
+#      separation even when the ZTE charge-threshold policy would not (capacity
+#      below the "start separation at" threshold).
 #
-# Unlike the generic "battery/status", the AC-supplied + bypassed state keeps
-# status=Charging but current_now goes positive -> detect the bypass via that node.
+# Node semantics:
+#   battery_charging_enabled  1 -> disable charging (bypass / charge separation)
+#                             0 -> resume charging
+#   charge_separation_switch  1 -> Settings UI shows ON
+#                             0 -> Settings UI shows OFF
 
 CTL="/sys/devices/platform/charger-manager/zte_power_supply/zte_battery/battery_charging_enabled"
 USB_ONLINE="/sys/class/power_supply/usb/online"
+SETTING_KEY="charge_separation_switch"
 
 log() {
-    # Redirect into the module log like normal mount-trigger scripts.
     echo "[zte-charge-separate] $*" >&2
 }
 
-# How are we being governed?
-#   "service.sh"      -> boot daemon, acted on usb attach/detach uevent.
-#   "on" / "off"      -> CLI force split / resume.
-#   "toggle"          -> flip current state.
-#   "status"          -> report current state.
 MODE="$1"
 
 check_env() {
     [ -w "$CTL" ] || { log "control node not writable: $CTL"; return 1; }
-    [ -e "$USB_ONLINE" ] || { log "usb online node missing"; return 1; }
+    [ -e "$USB_ONLINE" ] || { log "usb online node missing: $USB_ONLINE"; return 1; }
     return 0
 }
 
@@ -35,18 +37,22 @@ usb_attached() {
     [ "$(cat "$USB_ONLINE")" = "1" ]
 }
 
-state_val() {
-    cat "$CTL" 2>/dev/null || echo unknown
+set_setting() {
+    # Persist the ZTE switch so the Settings UI reflects our state.
+    # Best-effort: ignore failure (settings binary may not be ready early at boot).
+    settings put global "$SETTING_KEY" "$1" 2>/dev/null
 }
 
 split_on() {
     echo 1 > "$CTL"
-    log "charge separation enabled (battery_charging_enabled=1)"
+    set_setting 1
+    log "charge separation enabled (node=1, switch=1)"
 }
 
 split_off() {
+    set_setting 0
     echo 0 > "$CTL"
-    log "charge separation disabled (battery_charging_enabled=0)"
+    log "charge separation disabled (node=0, switch=0)"
 }
 
 configure() {
@@ -60,28 +66,40 @@ configure() {
 
 case "$MODE" in
     service)
-        # Boot daemon. USB present state is not reliably available early at
-        # boot (usb/online settles late) and sysfs attributes do not emit
-        # inotify events, so poll instead of watching.
+        # Boot daemon. USB present state is not reliably available early at boot
+        # (usb/online settles late) and sysfs attributes do not emit inotify
+        # events, so poll instead of watching.
         #
-        # Phase 1: wait for the charger policy to settle before touching the
-        # control node (up to 2 min, checking every 3s). Then apply.
-        # Phase 2: while running, re-check periodically so we also react to
-        # plug/unplug and to any charger-manager reset of the node.
+        # Phase 1: wait for the usb/online node to exist (up to 2 min, every 3s).
+        # Phase 2: apply initial state, then poll every 5s, re-applying only when
+        # the desired state differs from the current node value (so we also
+        # recover from any charger-policy service that re-enables charging).
         SETTLE=120
         INTERVAL=5
         waited=0
         while [ "$waited" -lt "$SETTLE" ]; do
-            [ "$(cat "$USB_ONLINE" 2>/dev/null)" = "None" ] || break
+            [ -e "$USB_ONLINE" ] && break
             sleep 3
             waited=$((waited + 3))
         done
-        # Always apply initial state (online 1 -> split; 0/absent -> normal).
-        configure || exit 1
-        # Main loop: re-apply on every interval. Cheap write if unchanged.
+
+        current=""
         while true; do
+            wanted=0
+            if [ -e "$USB_ONLINE" ] && [ "$(cat "$USB_ONLINE")" = "1" ]; then
+                wanted=1
+            fi
+
+            value="$(cat "$CTL" 2>/dev/null || echo -)"
+            if [ "$value" != "$wanted" ]; then
+                if [ "$wanted" = "1" ]; then
+                    split_on
+                else
+                    split_off
+                fi
+            fi
+
             sleep "$INTERVAL"
-            configure || break
         done
         ;;
     on)
@@ -94,14 +112,14 @@ case "$MODE" in
         ;;
     toggle)
         check_env || exit 1
-        if [ "$(state_val)" = "1" ]; then
+        if [ "$(cat "$CTL" 2>/dev/null)" = "1" ]; then
             split_off
         else
             split_on
         fi
         ;;
     status)
-        state_val
+        echo "node=$(cat "$CTL" 2>/dev/null) switch=$(settings get global "$SETTING_KEY" 2>/dev/null)"
         ;;
     *)
         echo "usage: $0 {service|on|off|toggle|status}" >&2
