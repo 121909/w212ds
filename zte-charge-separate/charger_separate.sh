@@ -38,11 +38,17 @@ usb_attached() {
 }
 
 # The separation should engage only when a real data host (PC/Windows with adb)
-# supplies the port - NOT for a plain wall/USB charger. A charger still reports
-# usb/online=1, so gate on the USB gadget config instead:
-#   "charging,adb" / "mtp,adb" / "rndis,adb" ...  -> data host present -> split
-#   "charging" / "charge_only" ...                -> charger only -> normal charge
+# is physically connected AND the USB gadget is in a data mode.
+#
+# Physical link (avoids stale gadget state when the cable is unplugged):
+#   usb/online=1  keeps it true; on unplug it drops to 0 even though
+#   sys.usb.state may linger at "charging,adb" for a while.
+#
+# Data mode (avoids wall/USB chargers, which also report online=1):
+#   "charging,adb" / "mtp,adb" / "rndis,adb" ... -> data host -> split
+#   "charging" / "charge_only" ...               -> charger only -> normal charge
 usb_host_attached() {
+    [ "$(cat "$USB_ONLINE")" = "1" ] || return 1
     case "$(getprop sys.usb.state)" in
         *,adb) return 0 ;;
         *) return 1 ;;
