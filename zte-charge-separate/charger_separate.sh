@@ -18,8 +18,10 @@
 #                             0 -> Settings UI shows OFF
 
 CTL="/sys/devices/platform/charger-manager/zte_power_supply/zte_battery/battery_charging_enabled"
-USB_ONLINE="/sys/class/power_supply/usb/online"
 SETTING_KEY="charge_separation_switch"
+MODDIR="${0%/*}"
+# Shared, device-verified discriminator: echo PC|CHARGER|DISCONNECTED
+. "$MODDIR/detect.sh"
 
 log() {
     echo "[zte-charge-separate] $*" >&2
@@ -37,22 +39,10 @@ usb_attached() {
     [ "$(cat "$USB_ONLINE")" = "1" ]
 }
 
-# The separation should engage only when a real data host (PC/Windows with adb)
-# is physically connected AND the USB gadget is in a data mode.
-#
-# Physical link (avoids stale gadget state when the cable is unplugged):
-#   usb/online=1  keeps it true; on unplug it drops to 0 even though
-#   sys.usb.state may linger at "charging,adb" for a while.
-#
-# Data mode (avoids wall/USB chargers, which also report online=1):
-#   "charging,adb" / "mtp,adb" / "rndis,adb" ... -> data host -> split
-#   "charging" / "charge_only" ...               -> charger only -> normal charge
+# Separation engages only when connected to a real USB data host (PC).
+# Empirically SDP/CDP = PC, DCP/PD/etc = charger on this ZTE (see detect.sh).
 usb_host_attached() {
-    [ "$(cat "$USB_ONLINE")" = "1" ] || return 1
-    case "$(getprop sys.usb.state)" in
-        *,adb) return 0 ;;
-        *) return 1 ;;
-    esac
+    [ "$(detect_connection)" = "PC" ]
 }
 
 set_setting() {
@@ -144,10 +134,13 @@ case "$MODE" in
         fi
         ;;
     status)
-        echo "node=$(cat "$CTL" 2>/dev/null) switch=$(settings get global "$SETTING_KEY" 2>/dev/null)"
+        echo "node=$(cat "$CTL" 2>/dev/null) switch=$(settings get global "$SETTING_KEY" 2>/dev/null) conn=$(detect_connection)"
+        ;;
+    detect)
+        detect_connection
         ;;
     *)
-        echo "usage: $0 {service|on|off|toggle|status}" >&2
+        echo "usage: $0 {service|on|off|toggle|status|detect}" >&2
         exit 1
         ;;
 esac

@@ -1,6 +1,6 @@
 id=zte-charge-separate
 name=Bypass Charge Separation (ZTE)
-version=1.1.0
-versionCode=2
+version=1.2.0
+versionCode=3
 author=oh-my-pi
-description=Charge separation (bypass charging) for ZTE devices. Drives the official charge_separation_switch setting (keeps Settings UI in sync) and hard-engages the sysfs node while USB power is attached, even below the vendor charge threshold.
+description=Charge separation (bypass charging) for ZTE devices. Detects PC (USB data host, SDP/CDP) vs charger (DCP/PD) via charger_psy/usb_type; auto-engages separation only on PC, keeps Settings UI switch in sync, hard-engages the sysfs node below the vendor charge threshold.
