@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" type="text/css" href="/internal/insets.css">
+<title>充电分离控制</title>
+<style>
+    :root { --inset-top: var(--window-inset-top, 0px); --inset-bottom: var(--window-inset-bottom, 0px); }
+    body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; margin: 0; padding: calc(12px + var(--inset-top)) 16px calc(12px + var(--inset-bottom)); }
+    .card { background: #262626; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    h1 { font-size: 17px; margin: 0 0 12px; }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #333; }
+    .row:last-child { border-bottom: none; }
+    .lbl .t { font-size: 15px; font-weight: 600; }
+    .lbl .d { font-size: 12px; color: #999; margin-top: 3px; }
+    .switch { width: 48px; height: 28px; border-radius: 14px; background: #555; position: relative; transition: background .2s; flex-shrink: 0; }
+    .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; }
+    .switch.on { background: #4caf50; }
+    .switch.on::after { transform: translateX(20px); }
+    .status { font-size: 13px; color: #888; padding: 6px 0; }
+    .status b { color: #eee; }
+    button { width: 100%; padding: 11px; border: none; border-radius: 8px; font-size: 14px; background: #333; color: #eee; cursor: pointer; margin-top: 8px; }
+    button.primary { background: #4caf50; color: #fff; }
+    button:disabled { opacity: .5; }
+    .note { font-size: 12px; color: #888; margin-top: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+    <div class="card">
+        <h1>充电分离自动控制</h1>
+        <div class="row">
+            <div class="lbl"><div class="t">插入电脑 USB 自动分离</div><div class="d">PC 数据口 (SDP/CDP)</div></div>
+            <div class="switch" id="swUsb" data-key="SEP_ON_USB"></div>
+        </div>
+        <div class="row">
+            <div class="lbl"><div class="t">插入充电器自动分离</div><div class="d">充电器 (DCP/PD)</div></div>
+            <div class="switch" id="swChg" data-key="SEP_ON_CHARGER"></div>
+        </div>
+        <div class="note">插入瞬间按开关设一次开始分离，之后不做持续监控；断电后系统自动关闭充电分离，无需额外操作。</div>
+    </div>
+
+    <div class="card">
+        <h1>当前状态</h1>
+        <div class="status">当前连接：<b id="conn">读取中…</b></div>
+        <div class="status">充电分离开关 (switch)：<b id="swVal">读取中…</b></div>
+        <div class="status">硬件节点 (battery_charging_enabled)：<b id="nodeVal">读取中…</b></div>
+        <button id="btnApply" class="primary">立即按当前连接应用</button>
+        <button id="btnRefresh">刷新状态</button>
+    </div>
+
+    <script type="module">
+    import { exec } from 'kernelsu';
+
+    const CONFIG = '/data/adb/modules/zte-charge-separate/config.conf';
+    const SETTING = 'charge_separation_switch';
+    const USB_ONLINE = '/sys/class/power_supply/usb/online';
+    const CHG_TYPE = '/sys/class/power_supply/charger_psy/usb_type';
+    const GADGET = '/sys/class/android_usb/android0/state';
+    const NODE = '/sys/devices/platform/charger-manager/zte_power_supply/zte_battery/battery_charging_enabled';
+
+    const t = (k) => document.getElementById(k);
+
+    function setSwitchUI(el, on) {
+        el.classList.toggle('on', !!on);
+    }
+
+    // Read current config values from config.conf via root shell.
+    async function readConfig() {
+        const { stdout } = await exec('cat ' + CONFIG);
+        let usb = 1, chg = 0;
+        for (const line of stdout.split('\n')) {
+            const m = line.match(/^\s*(SEP_ON_USB|SEP_ON_CHARGER)\s*=\s*([01])/);
+            if (m) {
+                if (m[1] === 'SEP_ON_USB') usb = +m[2];
+                else chg = +m[2];
+            }
+        }
+        return { usb, chg };
+    }
+
+    // Write the two switches back into config.conf (in place), preserving comments.
+    async function writeConfig(usb, chg) {
+        const esc = (p) => p.replace(/'/g, "'\\''");
+        await exec('sed -i ' +
+            "'s/^SEP_ON_USB=.*/SEP_ON_USB=" + usb + "/' " + esc(CONFIG) + '; ' +
+            'sed -i ' + "'s/^SEP_ON_CHARGER=.*/SEP_ON_CHARGER=" + chg + "/' " + esc(CONFIG));
+        const { stdout } = await exec('cat ' + CONFIG);
+        return stdout;
+    }
+
+    // Classify connection: PC / CHARGER / OFF (same logic as common.sh).
+    async function detectConn() {
+        const { stdout } = await exec('cat ' + USB_ONLINE);
+        if (stdout.trim() !== '1') return 'OFF';
+        const { stdout: cur } = await exec('cat ' + CHG_TYPE);
+        const m = cur.match(/\[([A-Za-z0-9_]+)\]/);
+        const t = m ? m[1] : '';
+        if (t === 'SDP' || t === 'CDP') return 'PC';
+        if (/^(DCP|PD|PD_DRP|BrickID|C)$/.test(t)) return 'CHARGER';
+        const { stdout: g } = await exec('cat ' + GADGET);
+        return g.trim() === 'CONFIGURED' ? 'PC' : 'CHARGER';
+    }
+
+    // Apply separation once for the current connection, per the toggles.
+    async function applyOnce() {
+        const cfg = await readConfig();
+        const conn = await detectConn();
+        let desired = 0;
+        if (conn === 'PC' && cfg.usb) desired = 1;
+        else if (conn === 'CHARGER' && cfg.chg) desired = 1;
+        await exec('settings put global ' + SETTING + ' ' + desired);
+        return { conn, desired };
+    }
+
+    async function refreshStatus() {
+        const [conn, api] = await Promise.all([detectConn(), readConfig()]);
+        t('conn').textContent = conn;
+        setSwitchUI(t('swUsb'), api.usb === 1);
+        setSwitchUI(t('swChg'), api.chg === 1);
+        try {
+            const { stdout } = await exec('settings get global ' + SETTING);
+            t('swVal').textContent = stdout.trim();
+        } catch { t('swVal').textContent = '?'; }
+        try {
+            const { stdout } = await exec('cat ' + NODE);
+            t('nodeVal').textContent = stdout.trim();
+        } catch { t('nodeVal').textContent = '?'; }
+        return { usb: api.usb, chg: api.chg };
+    }
+
+    // Toggle handlers: update UI immediately, persist on click.
+    function wire(el) {
+        el.addEventListener('click', async () => {
+            const cfg = await readConfig();
+            if (el.id === 'swUsb') cfg.usb = cfg.usb ? 0 : 1;
+            else cfg.chg = cfg.chg ? 0 : 1;
+            setSwitchUI(el, el.id === 'swUsb' ? cfg.usb : cfg.chg);
+            await writeConfig(cfg.usb, cfg.chg);
+            await refreshStatus();
+        });
+    }
+
+    t('btnApply').addEventListener('click', async () => {
+        t('btnApply').disabled = true;
+        const { conn, desired } = await applyOnce();
+        t('conn').textContent = conn;
+        t('btnApply').textContent = '已应用 (conn=' + conn + ', switch=' + desired + ')';
+        await refreshStatus();
+        setTimeout(() => { t('btnApply').disabled = false; t('btnApply').textContent = '立即按当前连接应用'; }, 1500);
+    });
+    t('btnRefresh').addEventListener('click', refreshStatus);
+
+    wire(t('swUsb'));
+    wire(t('swChg'));
+    refreshStatus();
+    </script>
+</body>
+</html>

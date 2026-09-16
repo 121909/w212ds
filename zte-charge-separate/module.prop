@@ -3,4 +3,5 @@ name=ZTE 充电分离自动控制
 version=2.1.0
 versionCode=5
 author=oh-my-pi
-description=插入电脑 USB 或充电器时按模块内两个开关(模块界面 Action 用音量键调整)自动开启中兴原生充电分离；仅写 charge_separation_switch 一次、不做持续监控，断电后系统自动关闭。已在 W210DS 实测：switch=1=分离、0=充电。
+description=插入电脑 USB 或充电器时按 webroot WebUI/模块界面内两个开关自动开启中兴原生充电分离；仅写 charge_separation_switch 一次、不做持续监控，断电后系统自动关闭。已实测：switch=1=分离、0=充电。
+webuiIcon=webroot/icon.svg
