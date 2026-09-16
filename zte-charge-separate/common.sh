@@ -1,24 +1,36 @@
 #!/system/bin/sh
 
-MODDIR="${0%/*}"
 SETTING_KEY="charge_separation_switch"
 USB_ONLINE_NODE="/sys/class/power_supply/usb/online"
 CHARGER_TYPE_NODE="/sys/class/power_supply/charger_psy/usb_type"
 GADGET_NODE="/sys/class/android_usb/android0/state"
-LOGFILE="$MODDIR/module.log"
-# Track previous connection to act on transitions, not continuously.
-LAST_CONN="none"
+CONFIG_FILE="$MODDIR/config.conf"
+LOGFILE="/cache/zte-charge-separate.log"
 
-log() {
-  [ -f "$LOGFILE" ] && [ "$(wc -c < "$LOGFILE" 2>/dev/null)" -ge 65536 ] && : > "$LOGFILE"
-  printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOGFILE"
+# Load the two toggles: SEP_ON_USB (PC->sep), SEP_ON_CHARGER (charger->sep).
+read_config() {
+  SEP_ON_USB=1
+  SEP_ON_CHARGER=0
+  [ -r "$CONFIG_FILE" ] || return 0
+  while IFS='=' read -r key value; do
+    case "$key" in
+      SEP_ON_USB) [ "$value" = "0" ] && SEP_ON_USB=0 ;;
+      SEP_ON_CHARGER) [ "$value" = "1" ] && SEP_ON_CHARGER=1 ;;
+    esac
+  done < "$CONFIG_FILE"
 }
 
-# Classify current connection: PC (USB data host) / CHARGER / OFF (unplugged).
+log() {
+  if [ -f "$LOGFILE" ] && [ "$(wc -c < "$LOGFILE" 2>/dev/null)" -ge 65536 ]; then
+    : > "$LOGFILE"
+  fi
+  printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOGFILE" 2>/dev/null
+}
+
+# Classify current connection: PC / CHARGER / OFF (unplugged).
 detect_conn() {
   if [ "$(cat "$USB_ONLINE_NODE" 2>/dev/null)" != "1" ]; then
-    echo "OFF"
-    return
+    echo "OFF"; return
   fi
   cur="$(cat "$CHARGER_TYPE_NODE" 2>/dev/null | sed -n 's/^.*\[\([A-Za-z0-9_]*\)\].*$/\1/p')"
   case "$cur" in
@@ -31,7 +43,7 @@ detect_conn() {
   echo "CHARGER"
 }
 
-# Only write when the switch actually differs from desired.
+# Only write when the switch actually differs.
 set_switch() {
   desired="$1"
   current="$(settings get global "$SETTING_KEY" 2>/dev/null)"
@@ -42,24 +54,24 @@ set_switch() {
   return 1
 }
 
-apply_state() {
+# Called once on an insertion event (usb/online 0->1). Decide separation by the
+# connection type and the matching toggle. No continuous enforcement: on unplug
+# the system closes separation by itself and we do nothing further.
+apply_once() {
+  read_config
   conn="$(detect_conn)"
-
-  # PC attached: always keep separation ON so the UI reflects it.
-  if [ "$conn" = "PC" ]; then
-    if set_switch 1; then log "conn=PC sep=on"; fi
-    LAST_CONN="PC"
-    return
+  desired=0
+  case "$conn" in
+    PC)
+      [ "$SEP_ON_USB" = "1" ] && desired=1
+      ;;
+    CHARGER)
+      [ "$SEP_ON_CHARGER" = "1" ] && desired=1
+      ;;
+  esac
+  if set_switch "$desired"; then
+    log "insert conn=$conn sep=$desired (usb_toggle=$SEP_ON_USB charger_toggle=$SEP_ON_CHARGER)"
+    return 0
   fi
-
-  # Non-PC: on the transition away from PC, restore normal charging once,
-  # then leave the switch alone so the user's manual choice on charger is respected.
-  if [ "$LAST_CONN" = "PC" ]; then
-    if set_switch 0; then log "conn=$conn sep=off"; fi
-  fi
-  if [ "$conn" = "OFF" ]; then
-    LAST_CONN="OFF"
-  else
-    LAST_CONN="CHARGER"
-  fi
+  return 0
 }

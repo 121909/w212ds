@@ -1,6 +1,6 @@
 id=zte-charge-separate
-name=ZTE 充电分离（PC 接入自动开启）
-version=2.0.0
-versionCode=4
+name=ZTE 充电分离自动控制
+version=2.1.0
+versionCode=5
 author=oh-my-pi
-description=USB 数据主机（PC）接入时自动开启中兴原生充电分离（charge_separation_switch=1），仅写系统设置开关、不干预硬件节点，拔线/接充电器时恢复或交还手动控制。已在 W210DS 实测语义：switch=1=分离、switch=0=正常充电。
+description=插入电脑 USB 或充电器时按模块内两个开关(模块界面 Action 用音量键调整)自动开启中兴原生充电分离；仅写 charge_separation_switch 一次、不做持续监控，断电后系统自动关闭。已在 W210DS 实测：switch=1=分离、0=充电。
