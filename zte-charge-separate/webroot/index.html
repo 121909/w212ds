@@ -77,6 +77,14 @@
     const GADGET = '/sys/class/android_usb/android0/state';
     const NODE = '/sys/devices/platform/charger-manager/zte_power_supply/zte_battery/battery_charging_enabled';
 
+    // PROBE: dump real ksu.exec return shape so we can read the right field.
+    (async () => {
+        try {
+            const r = await ksuObj.exec('echo HELLO_TEST');
+            log('exec(echo) return: ' + (typeof r === 'string' ? JSON.stringify(r) : JSON.stringify(r, (k,v)=> k==='stderr'?String(v).slice(0,120):v)));
+        } catch (e) { log('probe error: ' + e.message); }
+    })();
+
     const t = (k) => document.getElementById(k);
 
     function setSwitchUI(el, on) {
