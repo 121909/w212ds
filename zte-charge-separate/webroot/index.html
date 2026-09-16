@@ -25,11 +25,11 @@
     button.primary { background: #4caf50; color: #fff; }
     button:disabled { opacity: .5; }
     .note { font-size: 12px; color: #888; margin-top: 12px; line-height: 1.6; }
-    #diag { font-size: 11px; color: #ffb0b0; background: #2a1616; border-radius: 8px; padding: 10px; margin-top: 12px; white-space: pre-wrap; word-break: break-all; }
+    #diag { font-size: 11px; color: #ffb0b0; background: #2a1616; border-radius: 8px; padding: 10px; margin-top: 12px; white-space: pre-wrap; word-break: break-all; display: none; }
 </style>
 </head>
 <body>
-    <div id="diag">诊断加载中…</div>
+    <div id="diag" hidden></div>
 
     <div class="card">
         <h1>充电分离自动控制</h1>
@@ -53,47 +53,22 @@
         <button id="btnRefresh">刷新状态</button>
     </div>
 
-    <!-- 非 module 能力探测：即使 kernelsu import 失败也会运行 -->
-    <script>
-    (function () {
-        const diag = document.getElementById('diag');
-        const log = (l) => { diag.textContent += (diag.textContent ? '\n' : '') + l; };
-        const g = typeof window !== 'undefined' ? window : globalThis;
-        window.__diag = { log, report: (k, v) => log(k + ' = ' + (typeof v)) };
-        try {
-            const keys = Object.keys(g);
-            log('globals: ' + keys.filter(k => /ksu|kernel|mmrl|Mm|zte/i.test(k)).join(', ') || '(none matching)');
-            ['kernelsu','ksu','$MmFile','$zte_charge_separate','zte_charge_separate','android','webui'].forEach(k => {
-                if (k in g) { const v = g[k]; log('HAS ' + k + ' :: ' + typeof v + (v && typeof v === 'object' ? ' {exec:'+(typeof v.exec)+',spawn:'+(typeof v.spawn)+'}':'') ); }
-                else log('NO ' + k);
-            });
-            // Try dynamic import of the kernelsu module
-            import('kernelsu').then(m => {
-                log('dynamic import kernelsu OK keys=' + Object.keys(m).join(','));
-                window.__kernelsuModule = m;
-            }).catch(e => log('dynamic import ERROR: ' + e.message));
-        } catch (e) {
-            log('probe error: ' + e.message);
-        }
-        // global error handlers
-        window.addEventListener('error', e => log('error: ' + (e.message || e)));
-        window.addEventListener('unhandledrejection', e => log('unhandled: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)));
-    })();
-    </script>
-
     <script type="module">
-    // Try both static import paths; fall back to whatever window bridge we found.
-    let ksu;
-    try {
-        ksu = (await import('kernelsu'));
-    } catch (e) {
-        window.__diag && window.__diag.log('module import kernelsu FAILED: ' + e.message);
-        // fall back to injected window objects
-        const g = globalThis;
-        if (g.kernelsu) ksu = g.kernelsu;
-        else if (g.ksu) ksu = g.ksu;
+    // SukiSU / MMRL WebUI injects a global `ksu` object (exec/spawn) —
+    // NOT the ES module `kernelsu`. ksu.exec is a Java bridge method that
+    // depends on `this`, so we must always call it as window.ksu.exec(...).
+    const diag = document.getElementById('diag');
+    function log(l) { diag.hidden = false; diag.textContent += (diag.textContent ? '\n' : '') + l; }
+    window.addEventListener('error', e => log('error: ' + (e.message || e)));
+    window.addEventListener('unhandledrejection', e => log('unhandled: ' + ((e.reason && e.reason.message) || e.reason)));
+
+    const ksuObj = typeof window !== 'undefined' && window.ksu ? window.ksu
+                : (typeof globalThis !== 'undefined' && globalThis.ksu ? globalThis.ksu : null);
+    if (!ksuObj || typeof ksuObj.exec !== 'function') {
+        log('FATAL: window.ksu.exec not available');
+        throw new Error('no ksu.exec');
     }
-    const execFn = (ksu && (ksu.exec || ksu.module_exec)) || null;
+    const exec = (cmd) => ksuObj.exec(cmd);   // keeps `this` === ksuObj
 
     const CONFIG = '/data/adb/modules/zte-charge-separate/config.conf';
     const SETTING = 'charge_separation_switch';
@@ -101,12 +76,6 @@
     const CHG_TYPE = '/sys/class/power_supply/charger_psy/usb_type';
     const GADGET = '/sys/class/android_usb/android0/state';
     const NODE = '/sys/devices/platform/charger-manager/zte_power_supply/zte_battery/battery_charging_enabled';
-
-    if (!execFn) {
-        document.getElementById('diag').textContent += '\nFATAL: no exec bridge found';
-        throw new Error('no exec bridge');
-    }
-    const exec = async (cmd) => execFn(cmd);
 
     const t = (k) => document.getElementById(k);
 
@@ -197,7 +166,6 @@
 
     wire(t('swUsb'));
     wire(t('swChg'));
-    window.__diag && window.__kernelsuModule && window.__diag.log('static import OK exec=' + typeof execFn);
     refreshStatus();
     </script>
 </body>
