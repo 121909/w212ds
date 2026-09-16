@@ -1,5 +1,0 @@
-# zte-charge-separate
-# Allow the KernelSU root (su) domain to write the charge-separation sysfs node.
-# On-device context: u:object_r:sysfs_power:s0
-allow su sysfs_power dir { search read open }
-allow su sysfs_power file { read open write }

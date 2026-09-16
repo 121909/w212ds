@@ -1,6 +1,6 @@
 id=zte-charge-separate
-name=Bypass Charge Separation (ZTE)
-version=1.2.0
-versionCode=3
+name=ZTE 充电分离（PC 接入自动开启）
+version=2.0.0
+versionCode=4
 author=oh-my-pi
-description=Charge separation (bypass charging) for ZTE devices. Detects PC (USB data host, SDP/CDP) vs charger (DCP/PD) via charger_psy/usb_type; auto-engages separation only on PC, keeps Settings UI switch in sync, hard-engages the sysfs node below the vendor charge threshold.
+description=USB 数据主机（PC）接入时自动开启中兴原生充电分离（charge_separation_switch=1），仅写系统设置开关、不干预硬件节点，拔线/接充电器时恢复或交还手动控制。已在 W210DS 实测语义：switch=1=分离、switch=0=正常充电。
