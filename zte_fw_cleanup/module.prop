@@ -1,0 +1,6 @@
+id=zte_fw_cleanup
+name=ZTE Firewall Cleanup
+version=v1.0
+versionCode=1
+author=w212
+description=等待系统启动完成后清理 ZTE 厂商防火墙链 zte_fw_gms(iptables/ip6tables filter),执行结果在模块 WebUI 中展示。

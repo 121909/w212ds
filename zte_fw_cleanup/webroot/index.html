@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZTE Firewall Cleanup</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 16px; background: #0f1115; color: #e6e6e6;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #8b90a0; font-size: 12px; margin-bottom: 12px; }
+  .log {
+    background: #161a22; border: 1px solid #262b36; border-radius: 8px;
+    padding: 12px; font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 12px; white-space: pre-wrap; word-break: break-all;
+    min-height: 96px; margin: 0 0 12px;
+  }
+  .bar { display: flex; gap: 8px; }
+  button {
+    flex: 1; padding: 10px; border: 0; border-radius: 8px;
+    background: #2b6cf6; color: #fff; font-size: 14px; cursor: pointer;
+  }
+  button.ghost { background: #262b36; }
+  button:active { opacity: .8; }
+</style>
+</head>
+<body>
+<h1>ZTE Firewall Cleanup</h1>
+<div class="sub">模块 ID：zte_fw_cleanup · 结果日志：webroot/result.log</div>
+<pre class="log" id="log">加载中…</pre>
+<div class="bar">
+  <button id="run" class="ghost">立即执行</button>
+  <button id="refresh">刷新</button>
+</div>
+<script>
+  const moduleDir = '/data/adb/modules/zte_fw_cleanup';
+  const logEl = document.getElementById('log');
+  const runBtn = document.getElementById('run');
+
+  function show(text) { logEl.textContent = text; }
+
+  async function loadLog() {
+    show('加载中…');
+    let text = '';
+    try {
+      const r = await fetch('./result.log?t=' + Date.now());
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      text = await r.text();
+    } catch (e) {
+      // webroot 静态文件取不到时，退回 ksu 桥接 API
+      try {
+        const res = await window.ksu.readFile({ path: moduleDir + '/webroot/result.log' });
+        text = (res && res.data) || '';
+      } catch (e2) {
+        show('无法读取结果日志：' + e2);
+        return;
+      }
+    }
+    show(text.trim() || '（暂无记录：模块启动后尚未执行，或 zte_fw_gms 链在该网络命名空间不存在）');
+  }
+
+  async function runNow() {
+    if (!window.ksu || !window.ksu.exec) {
+      show('当前环境不支持 ksu.exec，无法在界面内立即执行。请重启设备后查看开机执行结果。');
+      return;
+    }
+    show('执行中…');
+    try {
+      await window.ksu.exec({
+        command: '/system/bin/sh',
+        args: [moduleDir + '/run.sh'],
+        stdin: '',
+        timeout: 60000,
+        shell: false
+      });
+    } catch (e) {
+      show('执行失败：' + (e && e.message ? e.message : e));
+      return;
+    }
+    loadLog();
+  }
+
+  document.getElementById('refresh').addEventListener('click', loadLog);
+  runBtn.addEventListener('click', runNow);
+  loadLog();
