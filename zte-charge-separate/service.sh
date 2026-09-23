@@ -5,10 +5,10 @@ MODDIR="${0%/*}"
 TH_LATCH=0
 
 # Wait for Android to finish booting. Single loop, two cadences:
-# - every 1s: watch insertion events (usb/online 0 -> 1) and decide once
+# - every 3s: watch insertion events (usb/online 0 -> 1) and decide once
 #   (PC / charger mode 1). Unplug is handled by the system.
-# - every 30s: threshold mode state machine (charger mode 2), lightweight
-#   polling copied from the Magisk reference, at a 30s interval.
+# - every ~30s (10 x 3s): threshold mode state machine (charger mode 2),
+#   lightweight polling at a 30s interval.
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
   sleep 5
 done
@@ -26,9 +26,9 @@ while true; do
   fi
   prev="$cur"
   tick=$((tick + 1))
-  if [ "$tick" -ge 30 ]; then
+  if [ "$tick" -ge 10 ]; then
     tick=0
     threshold_tick
   fi
-  sleep 1
+  sleep 3
 done

@@ -33,7 +33,7 @@
     button.primary { background: #4caf50; color: #fff; }
     button:disabled { opacity: .5; }
     .note { font-size: 12px; color: #888; margin-top: 12px; line-height: 1.6; }
-    #diag { font-size: 11px; color: #ffb0b0; background: #2a1616; border-radius: 8px; padding: 10px; margin-top: 12px; white-space: pre-wrap; word-break: break-all; display: none; }
+    #diag { font-size: 11px; color: #ffb0b0; background: #2a1616; border-radius: 8px; padding: 10px; margin-top: 12px; white-space: pre-wrap; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -93,7 +93,31 @@
         log('FATAL: window.ksu.exec not available');
         throw new Error('no ksu.exec');
     }
-    const exec = (cmd) => ksuObj.exec(cmd);   // keeps `this` === ksuObj
+    // Contract adapter.
+    // Android's addJavascriptInterface exposes only the most-parameterized
+    // overload. The synchronous exec(cmd): String is shadowed by the
+    // 3-arg async form exec(cmd, options, callbackFunc), so every ksu.exec()
+    // actually lands on the callback variant and returns undefined.
+    // -> Route every call through that 3-arg form: ksu.exec(cmd, null, cb).
+    // Each pending call gets its own global callback name so concurrent
+    // Promise.all() callers (refreshStatus) resolve independently.
+    // The bridge calls `cb(code, stdout, stderr)` via loadUrl("javascript:...")
+    // on the UI thread, so results are raw strings (JSON.stringify already
+    // applied by the Kotlin side when needed).
+    let __ksuSeq = 0;
+    const exec = (cmd) => new Promise((resolve) => {
+        const cb = '__ksuExecCb_' + (__ksuSeq++);
+        window[cb] = (code, stdout, stderr) => {
+            delete window[cb];
+            resolve({ code, stdout: stdout ?? '', stderr: stderr ?? '' });
+        };
+        try {
+            ksuObj.exec(cmd, null, 'window.' + cb);
+        } catch (e) {
+            delete window[cb];
+            resolve({ code: -1, stdout: '', stderr: String((e && e.message) || e) });
+        }
+    });
 
     const CONFIG = '/data/adb/modules/zte-charge-separate/config.conf';
     const SETTING = 'charge_separation_switch';
