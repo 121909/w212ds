@@ -39,44 +39,49 @@
 <script>
   const moduleDir = '/data/adb/modules/zte_fw_cleanup';
   const logEl = document.getElementById('log');
-  const runBtn = document.getElementById('run');
 
   function show(text) { logEl.textContent = text; }
 
+  // --- SukiSU（SukiSU-Ultra）桥接适配 ---
+  // 同名 exec 只暴露参数最多的重载 exec(cmd, options, callbackFunc)：
+  //   用 root shell 执行 cmd 字符串，再经 loadUrl 调用全局回调 (code, stdout, stderr)。
+  // 1 参同步版 exec、ksu.readFile、以及 webroot 静态文件 fetch 在本环境均不可用，
+  // 因此读取/执行一律走 exec 字符串命令 + 全局回调。
+  let __seq = 0;
+  function ksuExec(cmd) {
+    if (!window.ksu || !window.ksu.exec) {
+      return Promise.reject(new Error('当前环境不支持 ksu.exec'));
+    }
+    return new Promise((resolve, reject) => {
+      const name = '__cb' + (__seq++);
+      window[name] = (code, stdout, stderr) => {
+        delete window[name];
+        resolve({ code, stdout: stdout || '', stderr: stderr || '' });
+      };
+      try {
+        window.ksu.exec(cmd, null, 'window.' + name);
+      } catch (e) {
+        delete window[name];
+        reject(e);
+      }
+    });
+  }
+
   async function loadLog() {
     show('加载中…');
-    let text = '';
     try {
-      const r = await fetch('./result.log?t=' + Date.now());
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      text = await r.text();
+      const r = await ksuExec('cat ' + moduleDir + '/webroot/result.log');
+      const text = (r.stdout || '').trim();
+      show(text || '（暂无记录：模块启动后尚未执行，或 zte_fw_gms 链在该网络命名空间不存在）');
     } catch (e) {
-      // webroot 静态文件取不到时，退回 ksu 桥接 API
-      try {
-        const res = await window.ksu.readFile({ path: moduleDir + '/webroot/result.log' });
-        text = (res && res.data) || '';
-      } catch (e2) {
-        show('无法读取结果日志：' + e2);
-        return;
-      }
+      show('读取失败：' + (e && e.message ? e.message : e));
     }
-    show(text.trim() || '（暂无记录：模块启动后尚未执行，或 zte_fw_gms 链在该网络命名空间不存在）');
   }
 
   async function runNow() {
-    if (!window.ksu || !window.ksu.exec) {
-      show('当前环境不支持 ksu.exec，无法在界面内立即执行。请重启设备后查看开机执行结果。');
-      return;
-    }
     show('执行中…');
     try {
-      await window.ksu.exec({
-        command: '/system/bin/sh',
-        args: [moduleDir + '/run.sh'],
-        stdin: '',
-        timeout: 60000,
-        shell: false
-      });
+      await ksuExec('/system/bin/sh ' + moduleDir + '/run.sh');
     } catch (e) {
       show('执行失败：' + (e && e.message ? e.message : e));
       return;
@@ -85,5 +90,8 @@
   }
 
   document.getElementById('refresh').addEventListener('click', loadLog);
-  runBtn.addEventListener('click', runNow);
+  document.getElementById('run').addEventListener('click', runNow);
   loadLog();
+</script>
+</body>
+</html>

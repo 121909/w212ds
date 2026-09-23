@@ -16,7 +16,7 @@ until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 5
 done
 
-sleep 2   # settle a little after boot_completed so iptables is usable
+sleep 30   # settle a little after boot_completed so iptables is usable
 
 /system/bin/sh "$MODDIR/run.sh"
 exit 0
