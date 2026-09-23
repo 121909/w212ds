@@ -1,7 +1,7 @@
 id=zte-charge-separate
 name=ZTE 充电分离自动控制
-version=2.2.0
-versionCode=6
+version=2.2.1
+versionCode=7
 author=oh-my-pi
-description=插入电脑 USB 时按开关动作一次；充电器可选关闭/插入立即分离/电量阈值模式——达到阈值(50-90%)开启中兴原生充电分离，可选低于阈值自动关闭或闩锁保持到拔电。仅写 charge_separation_switch，断电后系统自动关闭。全部设置在 WebUI 调整。
+description=插入电脑 USB 时按开关动作一次；充电器可选关闭/插入立即分离/电量阈值模式——达到阈值(50-90%)开启中兴原生充电分离，可选低于阈值自动关闭或闩锁保持到拔电。仅写 charge_separation_switch，断电后系统自动关闭。3s 插拔轮询/30s 阈值检查；适配 SukiSU WebUI exec 桥。全部设置在 WebUI 调整。
 webuiIcon=webroot/icon.svg

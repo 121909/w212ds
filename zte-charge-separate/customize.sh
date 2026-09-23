@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 ui_print "***************************************"
-ui_print " ZTE 充电分离自动控制 v2.2.0"
+ui_print " ZTE 充电分离自动控制 v2.2.1"
 ui_print "***************************************"
 ui_print "仅写 charge_separation_switch（1=分离，0=充电）"
 ui_print "PC USB：插入时按开关动作一次，不做持续监控"
