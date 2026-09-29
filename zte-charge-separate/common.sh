@@ -92,19 +92,13 @@ apply_once() {
   return 0
 }
 
-# Threshold mode tick (every 30s from service.sh). Reads only usb/online while
-# unplugged; while charging on a CHARGER source compares capacity against
-# THRESHOLD per AUTO_CLOSE semantics. Never acts on PC connections.
+# Threshold mode tick (every 30s from service.sh). Only acts while a CHARGER
+# source is attached, comparing capacity against THRESHOLD per AUTO_CLOSE
+# semantics. Unplug handling lives in service.sh's faster loop.
 threshold_tick() {
   read_config
   [ "$CHARGER_MODE" = "2" ] || return 0
-  if [ "$(cat "$USB_ONLINE_NODE" 2>/dev/null)" != "1" ]; then
-    if [ "${TH_LATCH:-0}" = "1" ]; then
-      TH_LATCH=0
-      set_switch 0 && log "unplug latch reset sep=0"
-    fi
-    return 0
-  fi
+  [ "$(cat "$USB_ONLINE_NODE" 2>/dev/null)" = "1" ] || return 0
   [ "$THRESHOLD" != "0" ] || return 0
   [ "$(detect_conn)" = "CHARGER" ] || return 0
   capacity="$(cat "$CAPACITY_NODE" 2>/dev/null)"

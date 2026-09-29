@@ -22,7 +22,12 @@ while true; do
     apply_once
   fi
   if [ "$prev" = "1" ] && [ "$cur" != "1" ]; then
+    # Unplug resets the latch here, ahead of threshold_tick, so this is the only
+    # place that can record the event. Always log: the switch itself normally
+    # self-resets on power removal, so set_switch is usually a no-op here.
     TH_LATCH=0
+    set_switch 0
+    log "unplug sep=0 latch=0"
   fi
   prev="$cur"
   tick=$((tick + 1))
