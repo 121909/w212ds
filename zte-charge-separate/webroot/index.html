@@ -65,7 +65,15 @@
             <div class="lbl"><div class="t">低于阈值自动关闭</div><div class="d" id="autoDesc">开：低于阈值关分离、回到阈值再开；关：开启后保持到拔电</div></div>
             <div class="switch" id="swAuto"></div>
         </div>
-        <div class="note" id="modeNote">充电器阈值模式每 30 秒检查一次电量；拔电后系统自动关闭分离。</div>
+        <div class="row">
+            <div class="lbl"><div class="t">满电保护 (100%分离)</div><div class="d" id="fullDesc">电量到 100% 时无论充电器还是电脑均开启分离（最高优先级）</div></div>
+            <div class="switch" id="swFull"></div>
+        </div>
+        <div class="row" id="rowFullDrop">
+            <div class="lbl"><div class="t">满电后掉电自动关闭</div><div class="d">开：离开 100% 后关分离恢复充电；关：保持到拔电</div></div>
+            <div class="switch" id="swFullDrop"></div>
+        </div>
+        <div class="note" id="modeNote">充电器阈值模式每 30 秒检查一次电量；满电保护 30 秒内检测到 100% 即开启；拔电后系统自动关闭分离。</div>
     </div>
 
     <div class="card">
@@ -139,18 +147,19 @@
     function setSwitchUI(el, on) {
         el.classList.toggle('on', !!on);
     }
-
     async function readConfig() {
         const { stdout } = await exec('cat ' + CONFIG);
-        const cfg = { usb: 1, mode: 0, thr: 70, auto: 0 };
+        const cfg = { usb: 1, mode: 0, thr: 70, auto: 0, full: 0, fullDrop: 0 };
         for (const line of String(stdout || '').split('\n')) {
-            const m = line.match(/^\s*(SEP_ON_USB|CHARGER_MODE|THRESHOLD|AUTO_CLOSE)\s*=\s*(-?\d+)/);
+            const m = line.match(/^\s*(SEP_ON_USB|CHARGER_MODE|THRESHOLD|AUTO_CLOSE|FULL_SEP|FULL_DROP_CLOSE)\s*=\s*(-?\d+)/);
             if (!m) continue;
             const v = +m[2];
             if (m[1] === 'SEP_ON_USB') cfg.usb = v ? 1 : 0;
             else if (m[1] === 'CHARGER_MODE') cfg.mode = [0, 1, 2].includes(v) ? v : 0;
             else if (m[1] === 'THRESHOLD') cfg.thr = THR_STEPS.includes(v) ? v : 70;
-            else cfg.auto = v ? 1 : 0;
+            else if (m[1] === 'AUTO_CLOSE') cfg.auto = v ? 1 : 0;
+            else if (m[1] === 'FULL_SEP') cfg.full = v ? 1 : 0;
+            else cfg.fullDrop = v ? 1 : 0;
         }
         return cfg;
     }
@@ -167,7 +176,12 @@
             'THRESHOLD=' + cfg.thr + '\n' +
             '# 低于阈值自动关闭充电分离（仅 CHARGER_MODE=2 且 THRESHOLD>0 生效）\n' +
             '# 0=达到阈值开启后保持（闩锁，直到拔电）  1=低于阈值自动关闭、回到阈值再次开启\n' +
-            'AUTO_CLOSE=' + cfg.auto + '\n';
+            'AUTO_CLOSE=' + cfg.auto + '\n' +
+            '# 满电保护：1=电量到 100% 时无论充电器还是电脑均开启充电分离（最高优先级）\n' +
+            'FULL_SEP=' + cfg.full + '\n' +
+            '# 满电后掉电是否关闭分离（仅 FULL_SEP=1 生效）\n' +
+            '# 0=开启后保持到拔电  1=掉电（离开 100%）后自动关闭分离恢复充电、再次满电重新开启\n' +
+            'FULL_DROP_CLOSE=' + cfg.fullDrop + '\n';
         const esc = (s) => s.replace(/'/g, "'\\''");
         await exec("printf '%s' '" + esc(body) + "' > " + CONFIG);
         const { stdout } = await exec('cat ' + CONFIG);
@@ -202,6 +216,12 @@
         let desired = 0;
         if (conn === 'OFF') {
             desired = 0;
+        } else if (cfg.full === 1) {
+            const cap = await readCapacity();
+            if (cap === null) return { conn, desired: 'keep' };
+            // At 100% (or held after it, drop-close off) -> separation on.
+            if (cap >= 100) desired = 1;
+            else return { conn, desired: 'keep' };  // sub-100 latch unknown in UI process
         } else if (conn === 'PC') {
             desired = cfg.usb;
         } else if (cfg.mode === 1) {
@@ -230,6 +250,9 @@
         t('rowAuto').classList.toggle('hidden', !showAuto);
         t('thrVal').textContent = cfg.thr === 0 ? '关' : cfg.thr + '%';
         setSwitchUI(t('swAuto'), cfg.auto === 1);
+        setSwitchUI(t('swFull'), cfg.full === 1);
+        t('rowFullDrop').classList.toggle('hidden', cfg.full !== 1);
+        setSwitchUI(t('swFullDrop'), cfg.fullDrop === 1);
     }
 
     async function refreshStatus() {
@@ -257,6 +280,8 @@
 
     t('swUsb').addEventListener('click', () => mutate(cfg => { cfg.usb = cfg.usb ? 0 : 1; }));
     t('swAuto').addEventListener('click', () => mutate(cfg => { cfg.auto = cfg.auto ? 0 : 1; }));
+    t('swFull').addEventListener('click', () => mutate(cfg => { cfg.full = cfg.full ? 0 : 1; }));
+    t('swFullDrop').addEventListener('click', () => mutate(cfg => { cfg.fullDrop = cfg.fullDrop ? 0 : 1; }));
     for (const b of t('segMode').querySelectorAll('button'))
         b.addEventListener('click', () => mutate(cfg => { cfg.mode = +b.dataset.m; }));
 

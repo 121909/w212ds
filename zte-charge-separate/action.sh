@@ -5,8 +5,8 @@ MODDIR="${0%/*}"
 read_config
 
 save_config() {
-  printf '# 充电分离配置（KernelSU 模块页 WebUI 可视化调整）\n# 0=关闭 1=开启\nSEP_ON_USB=%s\n# 充电器模式：0=关闭  1=插入立即分离  2=电量阈值模式\nCHARGER_MODE=%s\n# 电量阈值（仅 CHARGER_MODE=2 生效）：0=不启用  可选 50/60/70/80/90\nTHRESHOLD=%s\n# 低于阈值自动关闭充电分离（仅 CHARGER_MODE=2 且 THRESHOLD>0 生效）\n# 0=达到阈值开启后保持（闩锁，直到拔电）  1=低于阈值自动关闭、回到阈值再次开启\nAUTO_CLOSE=%s\n' \
-    "$SEP_ON_USB" "$CHARGER_MODE" "$THRESHOLD" "$AUTO_CLOSE" > "$CONFIG_FILE"
+  printf '# 充电分离配置（KernelSU 模块页 WebUI 可视化调整）\n# 0=关闭 1=开启\nSEP_ON_USB=%s\n# 充电器模式：0=关闭  1=插入立即分离  2=电量阈值模式\nCHARGER_MODE=%s\n# 电量阈值（仅 CHARGER_MODE=2 生效）：0=不启用  可选 50/60/70/80/90\nTHRESHOLD=%s\n# 低于阈值自动关闭充电分离（仅 CHARGER_MODE=2 且 THRESHOLD>0 生效）\n# 0=达到阈值开启后保持（闩锁，直到拔电）  1=低于阈值自动关闭、回到阈值再次开启\nAUTO_CLOSE=%s\n# 满电保护：1=电量到 100%% 时无论充电器还是电脑均开启充电分离（最高优先级）\nFULL_SEP=%s\n# 满电后掉电是否关闭分离（仅 FULL_SEP=1 生效）\n# 0=开启后保持到拔电  1=掉电（离开 100%%）后自动关闭分离恢复充电、再次满电重新开启\nFULL_DROP_CLOSE=%s\n' \
+    "$SEP_ON_USB" "$CHARGER_MODE" "$THRESHOLD" "$AUTO_CLOSE" "$FULL_SEP" "$FULL_DROP_CLOSE" > "$CONFIG_FILE"
 }
 
 echo "======================================="
@@ -25,7 +25,7 @@ echo "  充电器模式           : $(
     *) echo 关闭 ;;
   esac
 )"
-echo ""
+echo "  满电保护 (100%分离)  : $([ "$FULL_SEP" = "1" ] && echo "$([ "$FULL_DROP_CLOSE" = "1" ] && echo '开启（掉电关闭）' || echo '开启（保持到拔电）')" || echo 关闭)"
 
 while true; do
   EVENT="$(timeout 6 getevent -ql 2>/dev/null | grep -m 1 -E 'KEY_VOLUME(UP|DOWN).*DOWN')"

@@ -19,9 +19,18 @@ mode_name="$(
   esac
 )"
 
+full_name="$(
+  if [ "$FULL_SEP" = "1" ]; then
+    if [ "$FULL_DROP_CLOSE" = "1" ]; then echo "开启(掉电关闭)"; else echo "开启(保持到拔电)"; fi
+  else
+    echo "关闭"
+  fi
+)"
+
 echo "conn=$conn node=$node switch=$switch"
 echo "cap=$cap% status=$status current=${cur}uA"
 echo "usb_toggle=$SEP_ON_USB charger_mode=$mode_name threshold=$THRESHOLD% auto_close=$AUTO_CLOSE latch=${TH_LATCH:-0}"
+echo "full_sep=$full_name full_latch=${FULL_LATCH:-0}"
 if [ "$switch" = "1" ]; then
   echo ">> 充电分离 = 开启"
 else
