@@ -43,5 +43,11 @@ while true; do
     set_switch 0
     log "unplug sep=0 latch=0"
   fi
+  prev="$cur"
+  tick=$((tick + 1))
+  if [ "$tick" -ge 10 ]; then
+    tick=0
+    threshold_tick
+  fi
   sleep 3
 done
